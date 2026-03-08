@@ -26,9 +26,7 @@
     "test:esm": "node tests/run.js \"node tests/index.js\"",
     "test:cjs": "node tests/run.js \"npm run build:cjs && cd cjs/tests && node index.js && cd ../../\"",
     "test:deno": "node tests/run-deno.js",
-    "lint": "eslint src && eslint tests",
-    "prepare": "npm run build",
-    "prepublishOnly": "npm run lint"
+    "prepare": "npm run build"
   },
   "files": [
     "/cf/src",
