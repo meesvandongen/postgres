@@ -1,3 +1,5 @@
 .claude/
 .test-bin/
 .test-pg/
+node_modules/
+pnpm-lock.yaml

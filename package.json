@@ -23,9 +23,9 @@
     "build:deno": "node transpile.deno.js",
     "build:cf": "node transpile.cf.js",
     "test": "npm run test:esm && npm run test:cjs && npm run test:deno",
-    "test:esm": "node tests/index.js",
-    "test:cjs": "npm run build:cjs && cd cjs/tests && node index.js && cd ../../",
-    "test:deno": "npm run build:deno && cd deno/tests && deno run --no-lock --allow-all --unsafely-ignore-certificate-errors index.js && cd ../../",
+    "test:esm": "node tests/run.js \"node tests/index.js\"",
+    "test:cjs": "node tests/run.js \"npm run build:cjs && cd cjs/tests && node index.js && cd ../../\"",
+    "test:deno": "node tests/run-deno.js",
     "lint": "eslint src && eslint tests",
     "prepare": "npm run build",
     "prepublishOnly": "npm run lint"
