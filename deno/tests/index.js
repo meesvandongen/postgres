@@ -1319,6 +1319,26 @@ t('forEach returns empty array', async() => {
   return [0, (await sql`select 1 as x`.forEach(() => { /* noop */ })).length]
 })
 
+t('Stream callback', async() => {
+  const order = []
+  await sql`select 1 as x union select 2 as x`.stream(async({ x }) => {
+    order.push(x + 'a')
+    await delay(10)
+    order.push(x + 'b')
+  })
+  return ['1a1b2a2b', order.join('')]
+})
+
+t('Stream callback throw', async() => {
+  const order = []
+  const error = await sql`select 1 as x union select 2 as x`.stream(async({ x }) => {
+    order.push(x)
+    throw new Error('wat')
+  }).catch(err => err.message)
+
+  return ['1,wat', [order.join(','), error].join(',')]
+})
+
 t('Cursor', async() => {
   const order = []
   await sql`select 1 as x union select 2 as x`.cursor(async([x]) => {
@@ -1457,6 +1477,41 @@ t('Async Iterator Cursor custom with less results than batch size', async() => {
   for await (const x of sql`select * from generate_series(1,20)`.cursor(21))
     order.push(x.length)
   return ['20', order.join(',')]
+})
+
+t('Stream as async iterator', async() => {
+  const order = []
+  for await (const row of sql`select generate_series(1,2) as x`.stream()) {
+    order.push(row.x + 'a')
+    await delay(10)
+    order.push(row.x + 'b')
+  }
+
+  return ['1a1b2a2b', order.join('')]
+})
+
+t('Stream as async iterator with break', async() => {
+  const seen = []
+
+  for await (const row of sql`select generate_series(1,100) as x`.stream()) {
+    seen.push(row.x)
+    break
+  }
+
+  return ['1,1', [seen[0], (await sql`select 1 as x`)[0].x].join(',')]
+})
+
+t('Stream iterator error', async() => {
+  let error
+
+  try {
+    for await (const _ of sql`wat`.stream())
+      error = _
+  } catch (err) {
+    error = err.code
+  }
+
+  return ['42601', error]
 })
 
 t('Transform row', async() => {

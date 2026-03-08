@@ -609,11 +609,8 @@ declare namespace postgres {
     execute(): this;
     cancel(): void;
 
-    /**
-     * @deprecated `.stream` has been renamed to `.forEach`
-     * @throws
-     */
-    stream(cb: (row: NonNullable<TRow[number]>, result: ExecutionResult<TRow[number]>) => void): never;
+    stream(): AsyncIterable<NonNullable<TRow[number]>>;
+    stream(cb: (row: NonNullable<TRow[number]>, result: ExecutionResult<TRow[number]>) => void | Promise<void>): Promise<ExecutionResult<TRow[number]>>;
     forEach(cb: (row: NonNullable<TRow[number]>, result: ExecutionResult<TRow[number]>) => void): Promise<ExecutionResult<TRow[number]>>;
 
     cursor(rows?: number | undefined): AsyncIterable<NonNullable<TRow[number]>[]>;

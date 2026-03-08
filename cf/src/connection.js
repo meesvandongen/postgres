@@ -175,6 +175,7 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
       return write(toBuffer(q))
         && !q.describeFirst
         && !q.cursorFn
+        && !q.streamFn
         && sent.length < max_pipeline
         && (!q.options.onexecute || q.options.onexecute(connection))
     } catch (error) {
@@ -520,9 +521,13 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
         : (row[column.name] = transform.value.from ? transform.value.from(value, column) : value)
     }
 
-    query.forEachFn
-      ? query.forEachFn(transform.row.from ? transform.row.from(row) : row, result)
-      : (result[rows++] = transform.row.from ? transform.row.from(row) : row)
+    const next = transform.row.from ? transform.row.from(row) : row
+
+    query.streamFn
+      ? query.streamFn(next, result, () => socket.resume()) || socket.pause()
+      : query.forEachFn
+        ? query.forEachFn(next, result)
+        : (result[rows++] = next)
   }
 
   function ParameterStatus(x) {

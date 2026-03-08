@@ -1,6 +1,7 @@
 const originCache = new Map()
     , originStackCache = new Map()
     , originError = Symbol('OriginError')
+  , noop = () => {}
 
 const CLOSE = module.exports.CLOSE = {}
 const Query = module.exports.Query = class Query extends Promise {
@@ -116,8 +117,198 @@ const Query = module.exports.Query = class Query extends Promise {
     return this
   }
 
-  stream() {
-    throw new Error('.stream has been renamed to .forEach')
+  stream(fn) {
+    this.options.simple = false
+
+    if (typeof fn === 'function') {
+      const resolve = this.resolve
+          , reject = this.reject
+
+      let resume = null
+        , queue = []
+        , finalValue
+        , busy = false
+        , done = false
+        , settled = false
+
+      const fail = err => {
+        if (settled)
+          return
+
+        done = settled = true
+        queue = []
+        resume && (resume(), resume = null)
+        reject(err)
+        Promise.resolve(this.cancel()).catch(noop)
+      }
+
+      const drain = () => {
+        if (settled || busy)
+          return
+
+        while (queue.length) {
+          const x = queue.shift()
+
+          try {
+            const pending = fn(x.row, x.result)
+            if (pending && typeof pending.then === 'function') {
+              busy = true
+              return pending.then(() => {
+                busy = false
+                drain()
+              }, fail)
+            }
+          } catch (err) {
+            return fail(err)
+          }
+        }
+
+        if (done)
+          return settled || (
+            resume && (resume(), resume = null),
+            settled = true,
+            resolve(finalValue)
+          )
+
+        resume && (resume(), resume = null)
+      }
+
+      this.streamFn = (row, result, resumeFn) => {
+        if (settled)
+          return false
+
+        resume = resumeFn
+
+        if (busy || queue.length) {
+          queue.push({ row, result })
+          return false
+        }
+
+        try {
+          const pending = fn(row, result)
+          if (pending && typeof pending.then === 'function') {
+            busy = true
+            pending.then(() => {
+              busy = false
+              drain()
+            }, fail)
+            return false
+          }
+          return true
+        } catch (err) {
+          fail(err)
+          return false
+        }
+      }
+
+      this.resolve = x => {
+        this.active = false
+        done = true
+        finalValue = x
+        drain()
+      }
+
+      this.reject = x => {
+        this.active = false
+        fail(x)
+      }
+
+      this.handle()
+      return this
+    }
+
+    return {
+      [Symbol.asyncIterator]: () => {
+        const query = this
+        let resume = null
+          , rows = []
+          , error = null
+          , done = false
+          , cancelled = false
+          , resolver = null
+
+        this.streamFn = (row, result, resumeFn) => {
+          if (cancelled)
+            return true
+
+          if (resolver) {
+            const x = resolver
+            resolver = null
+            x.resolve({ value: row, done: false })
+            return true
+          }
+
+          rows.push(row)
+          resume = resumeFn
+          return false
+        }
+
+        this.resolve = () => {
+          this.active = false
+          done = true
+          if (resolver && rows.length === 0) {
+            const x = resolver
+            resolver = null
+            x.resolve({ value: undefined, done: true })
+          }
+        }
+
+        this.reject = err => {
+          this.active = false
+
+          if (cancelled && err && err.code === '57014') {
+            done = true
+            if (resolver && rows.length === 0) {
+              const x = resolver
+              resolver = null
+              x.resolve({ value: undefined, done: true })
+            }
+            return
+          }
+
+          error = err
+          if (resolver && rows.length === 0) {
+            const x = resolver
+            resolver = null
+            x.reject(err)
+          }
+        }
+
+        this.execute()
+
+        return {
+          [Symbol.asyncIterator]() {
+            return this
+          },
+          next: () => {
+            if (rows.length) {
+              const value = rows.shift()
+              rows.length === 0 && resume && (resume(), resume = null)
+              return Promise.resolve({ value, done: false })
+            }
+
+            if (error)
+              return Promise.reject(error)
+
+            if (done)
+              return Promise.resolve({ value: undefined, done: true })
+
+            return new Promise((resolve, reject) => {
+              resolver = { resolve, reject }
+            })
+          },
+          return: async() => {
+            cancelled = true
+            done = true
+            rows = []
+            resume && (resume(), resume = null)
+            resolver && (resolver.resolve({ value: undefined, done: true }), resolver = null)
+            Promise.resolve(query.cancel()).catch(noop)
+            return { value: undefined, done: true }
+          }
+        }
+      }
+    }
   }
 
   forEach(fn) {
