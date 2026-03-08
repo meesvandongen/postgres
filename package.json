@@ -1,5 +1,5 @@
 {
-  "name": "postgres",
+  "name": "@mvd/postgres",
   "version": "3.4.8",
   "description": "Fastest full featured PostgreSQL client for Node.js",
   "type": "module",
